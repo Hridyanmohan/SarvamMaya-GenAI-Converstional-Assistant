@@ -27,8 +27,6 @@ The following diagram illustrates the complete architecture of the Sarvam Maya a
 
 The application was containerized using Docker and deployed on AWS EC2. The Docker image was pushed to Amazon ECR and then pulled and executed on the EC2 instance.
 
-![AWS Deployment Architecture](images/architecture.png)
-
 ## 🛠️ Technology Stack
 
 | Technology           | Purpose                                    |
