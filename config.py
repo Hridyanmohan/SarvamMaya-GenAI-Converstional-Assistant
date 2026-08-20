@@ -1,21 +1,27 @@
 import os
 from dotenv import load_dotenv
 
-# 1. Load variables securely from your local .env file
+# Load variables from .env
 load_dotenv()
 
-# 2. Centralize your Groq configurations
-# Fetch the API key safely from the environment
-GROQ_API_KEY = os.getenv("Paste_your_key_here_for_testing")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv(
+    "GROQ_MODEL",
+    "openai/gpt-oss-20b"
+)
 
-# 3. Streamlined Model parameters
-# In Groq, "greedy" decoding is achieved by setting temperature to 0.0
-PARAMETERS = {
-    "temperature": 0.0,
-    "max_tokens": 256,
+if not GROQ_API_KEY:
+    raise RuntimeError(
+        "GROQ_API_KEY is missing. "
+        "Create a .env file in the project root and add your Groq API key."
+    )
+
+
+
+# Model generation settings
+MODEL_PARAMETERS = {
+    "temperature": 0.7,
+    "max_completion_tokens": 2048,
 }
 
-# 4. Active, supported Groq Model IDs
-LLAMA_MODEL_ID = "llama-3.3-70b-versatile"    # Active high-performance model
-MISTRAL_MODEL_ID = "mixtral-8x7b-32768"       # Active high-speed Mixtral model
-GEMMA_MODEL_ID = "llama-3.1-8b-instant"               # Lightweight Google fallback model
+print("Groq model:", GROQ_MODEL) 

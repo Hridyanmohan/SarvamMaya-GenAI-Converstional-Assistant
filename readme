@@ -1,4 +1,37 @@
-pip install langchain-groq
-pip install langchain-groq langchain-core pydantic python-dotenv
-python llm_test.py
-python app.py
+# Sarvam Maya
+
+A local Flask-based AI chatbot powered by Groq and Llama 3.3 70B.
+
+## Features
+
+- Flask web application
+- Llama 3.3 70B
+- Groq API
+- Secure `.env` API key configuration
+- SQLite conversation history
+- Multiple conversation threads
+- New chat
+- Delete conversations
+- Markdown responses
+- Conversation context
+- Responsive UI
+
+## Project Structure
+
+```text
+genai_flask_app/
+│
+├── venv/
+├── static/
+│   ├── script.js
+│   └── styles.css
+├── templates/
+│   └── index.html
+├── .env
+├── .gitignore
+├── app.py
+├── config.py
+├── model.py
+├── requirements.txt
+├── chat_history.db
+└── README.md

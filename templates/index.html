@@ -1,75 +1,294 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
     <title>Sarvam Maya</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+
+    <!-- Google Font -->
+    <link
+        rel="preconnect"
+        href="https://fonts.googleapis.com"
+    >
+
+    <link
+        rel="preconnect"
+        href="https://fonts.gstatic.com"
+        crossorigin
+    >
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet"
+    >
+
+
+    <!-- Markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css">
+
+
+    <!-- Markdown HTML sanitizer -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+
+
+    <!-- Application CSS -->
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='styles.css') }}"
+    >
+
 </head>
+
+
 <body>
 
-    <div class="app-layout">
-        
-        <aside class="sidebar">
-            <button id="newChatBtn" class="new-chat-btn">
-                <span>+ New chat</span>
-            </button>
-            <div class="history-section">
-                <p class="history-heading">Recent Conversations</p>
-                <div id="historyList" class="history-list">
-                    </div>
-            </div>
-        </aside>
 
-        <div class="gemini-wrapper">
-            <header class="top-nav">
-                <div class="nav-left">
-                    <span class="brand-text">Sarvam Maya <span class="model-badge">Flash</span></span>
-                </div>
-            </header>
+<div class="app-layout">
 
-            <main class="chat-viewport">
-                <div id="welcomeScreen" class="gemini-welcome">
-                    <h1 class="greeting-text">Hello, I'm Maya!</h1>
-                    <p class="subtitle-text">How can I help you be more productive today?</p>
-                </div>
 
-                <div id="messagesContainer" class="conversation-stream"></div>
-                
-                <div id="loadingIndicator" class="gemini-loading" style="display: none;">
-                    <div class="pulse-line"></div>
-                </div>
-                <div id="messagesEnd"></div>
-            </main>
+    <!-- ================================================= -->
+    <!-- SIDEBAR -->
+    <!-- ================================================= -->
 
-            <footer class="input-container-dock">
-                <form id="chatForm" class="omnibox-form">
-                    <div class="model-selector-pill">
-                        <select id="modelSelect">
-                            <option value="llama">Llama 3.3</option>
-                            <option value="mistral">Llama 3.1 (Fast)</option>
-                            <option value="granite">Gemma 2</option>
-                        </select>
-                    </div>
-                    <div class="input-row">
-                        <textarea id="messageInput" placeholder="Ask Sarvam Maya..." rows="1" required></textarea>
-                        <button type="submit" id="sendButton" class="gemini-send-btn">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                <line x1="22" y1="2" x2="11" y2="13"></line>
-                                <polygon points="22,2 15,22 11,13 2,9 22,2"></polygon>
-                            </svg>
-                        </button>
-                    </div>
-                </form>
-                <div class="legal-disclaimer">Sarvam Maya provides quick, abbreviated analysis metrics layout.</div>
-            </footer>
+    <aside class="sidebar">
+
+
+        <button
+            id="newChatBtn"
+            class="new-chat-btn"
+            type="button"
+        >
+            <span class="plus-icon">+</span>
+            <span>New chat</span>
+        </button>
+
+
+        <div class="history-section">
+
+            <p class="history-heading">
+                Recent Conversations
+            </p>
+
+
+            <div
+                id="historyList"
+                class="history-list"
+            ></div>
+
         </div>
+
+
+        <div class="sidebar-footer">
+            <span>Sarvam Maya</span>
+        </div>
+
+    </aside>
+
+
+
+    <!-- ================================================= -->
+    <!-- MAIN APPLICATION -->
+    <!-- ================================================= -->
+
+    <div class="gemini-wrapper">
+
+
+        <!-- TOP NAVIGATION -->
+
+        <header class="top-nav">
+
+            <div class="nav-left">
+
+                <span class="brand-text">
+                    Sarvam Maya
+                </span>
+
+                <span class="model-badge">
+                    OpenAI Model
+                </span>
+
+            </div>
+
+        </header>
+
+
+
+        <!-- ================================================= -->
+        <!-- CHAT AREA -->
+        <!-- ================================================= -->
+
+        <main
+            id="chatViewport"
+            class="chat-viewport"
+        >
+
+
+            <!-- Welcome Screen -->
+
+            <div
+                id="welcomeScreen"
+                class="gemini-welcome"
+            >
+
+                <div class="welcome-icon">
+                    ✦
+                </div>
+
+                <h1 class="greeting-text">
+                    Hello, I'm Maya!
+                </h1>
+
+                <p class="subtitle-text">
+                    How can I help you be more productive today?
+                </p>
+
+            </div>
+
+
+
+            <!-- Messages -->
+
+            <div
+                id="messagesContainer"
+                class="conversation-stream"
+            ></div>
+
+
+
+            <!-- Loading -->
+
+            <div
+                id="loadingIndicator"
+                class="gemini-loading"
+                style="display: none;"
+            >
+
+                <div class="loading-content">
+
+                    <div class="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+
+                    <span>
+                        Maya is thinking...
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <div id="messagesEnd"></div>
+
+        </main>
+
+
+
+        <!-- ================================================= -->
+        <!-- INPUT AREA -->
+        <!-- ================================================= -->
+
+        <footer class="input-container-dock">
+
+
+            <form
+                id="chatForm"
+                class="omnibox-form"
+            >
+
+
+                <!-- Model indicator -->
+
+                <div class="model-selector-pill">
+
+                    <span class="model-dot"></span>
+
+                    <span>
+                        OpenAI Model
+                    </span>
+
+                </div>
+
+
+                <div class="input-row">
+
+
+                    <textarea
+                        id="messageInput"
+                        placeholder="Ask Sarvam Maya..."
+                        rows="1"
+                        autocomplete="off"
+                        required
+                    ></textarea>
+
+
+                    <button
+                        type="submit"
+                        id="sendButton"
+                        class="gemini-send-btn"
+                        aria-label="Send message"
+                    >
+
+                        <svg
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+
+                            <line
+                                x1="22"
+                                y1="2"
+                                x2="11"
+                                y2="13"
+                            ></line>
+
+                            <polygon
+                                points="22,2 15,22 11,13 2,9 22,2"
+                            ></polygon>
+
+                        </svg>
+
+                    </button>
+
+                </div>
+
+            </form>
+
+
+            <div class="legal-disclaimer">
+                Sarvam Maya uses OpenAI Model powered by Groq.
+            </div>
+
+        </footer>
+
+
     </div>
 
-    <script src="/static/script.js"></script>
+</div>
+
+
+<!-- Application JavaScript -->
+
+<script
+    src="{{ url_for('static', filename='script.js') }}"
+></script>
+
+
 </body>
+
 </html>

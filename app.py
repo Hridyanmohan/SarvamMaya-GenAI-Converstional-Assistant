@@ -1,151 +1,390 @@
 from flask import Flask, request, jsonify, render_template
-from model import llama_response, granite_response, mistral_response
+from model import groq_response
 import sqlite3
 import time
 import uuid
 
 app = Flask(__name__)
 
-# Initialize Local Database for Chat Architecture
+DATABASE = "chat_history.db"
+
+
+# =========================================================
+# DATABASE
+# =========================================================
+
+def get_db():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
 def init_db():
-    conn = sqlite3.connect('chat_history.db')
+    conn = get_db()
     cursor = conn.cursor()
-    # Table for separate conversation threads
-    cursor.execute('''CREATE TABLE IF NOT EXISTS threads 
-                      (id TEXT PRIMARY KEY, title TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    # Table for individual messages inside threads
-    cursor.execute('''CREATE TABLE IF NOT EXISTS messages 
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT, role TEXT, content TEXT)''')
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS threads (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            FOREIGN KEY (thread_id)
+                REFERENCES threads(id)
+                ON DELETE CASCADE
+        )
+    """)
+
     conn.commit()
     conn.close()
+
 
 init_db()
 
-@app.route('/', methods=['GET'])
+
+# =========================================================
+# SYSTEM PROMPT
+# =========================================================
+
+SYSTEM_PROMPT = """
+You are Sarvam Maya, a helpful, intelligent, accurate, and adaptive AI assistant.
+
+Your response style should depend on the user's request.
+
+1. SIMPLE QUESTIONS
+For greetings, simple facts, definitions, or yes/no questions:
+Give a short and direct answer.
+
+2. NORMAL QUESTIONS
+For conceptual questions, explanations, how-to questions, and summaries:
+Give a clear answer with useful structure and moderate detail.
+
+3. COMPLEX QUESTIONS
+For programming, troubleshooting, detailed guides, comparisons,
+technical explanations, or requests for comprehensive information:
+Give a detailed and well-structured answer.
+
+Use Markdown when it improves readability.
+
+For programming questions:
+- Explain important parts clearly.
+- Use proper code blocks.
+- Provide practical, copy-paste-ready solutions.
+- Do not unnecessarily shorten code.
+
+Avoid unnecessary conversational filler.
+
+Always answer the user's actual question directly.
+"""
+
+
+# =========================================================
+# HOME PAGE
+# =========================================================
+
+@app.route("/", methods=["GET"])
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-# --- SIDEBAR HISTORY API ENDPOINTS ---
 
-@app.route('/threads', methods=['GET'])
+# =========================================================
+# THREADS
+# =========================================================
+
+@app.route("/threads", methods=["GET"])
 def get_threads():
-    conn = sqlite3.connect('chat_history.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, title FROM threads ORDER BY timestamp DESC")
-    threads = [{"id": row[0], "title": row[1]} for row in cursor.fetchall()]
-    conn.close()
-    return jsonify(threads)
 
-@app.route('/threads/<thread_id>/messages', methods=['GET'])
+    conn = get_db()
+
+    threads = conn.execute("""
+        SELECT id, title
+        FROM threads
+        ORDER BY timestamp DESC
+    """).fetchall()
+
+    conn.close()
+
+    return jsonify([
+        {
+            "id": thread["id"],
+            "title": thread["title"]
+        }
+        for thread in threads
+    ])
+
+
+# =========================================================
+# GET THREAD MESSAGES
+# =========================================================
+
+@app.route("/threads/<thread_id>/messages", methods=["GET"])
 def get_messages(thread_id):
-    conn = sqlite3.connect('chat_history.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT role, content FROM messages WHERE thread_id = ? ORDER BY id ASC", (thread_id,))
-    messages = [{"role": row[0], "content": row[1]} for row in cursor.fetchall()]
-    conn.close()
-    return jsonify(messages)
 
-@app.route('/threads/<thread_id>', methods=['DELETE'])
+    conn = get_db()
+
+    messages = conn.execute("""
+        SELECT role, content
+        FROM messages
+        WHERE thread_id = ?
+        ORDER BY id ASC
+    """, (thread_id,)).fetchall()
+
+    conn.close()
+
+    return jsonify([
+        {
+            "role": message["role"],
+            "content": message["content"]
+        }
+        for message in messages
+    ])
+
+
+# =========================================================
+# DELETE THREAD
+# =========================================================
+
+@app.route("/threads/<thread_id>", methods=["DELETE"])
 def delete_thread(thread_id):
-    conn = sqlite3.connect('chat_history.db')
+
+    conn = get_db()
+
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM messages WHERE thread_id = ?", (thread_id,))
-    cursor.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
+
+    cursor.execute("""
+        DELETE FROM messages
+        WHERE thread_id = ?
+    """, (thread_id,))
+
+    cursor.execute("""
+        DELETE FROM threads
+        WHERE id = ?
+    """, (thread_id,))
+
     conn.commit()
     conn.close()
-    return jsonify({"status": "success"})
 
-# --- INFERENCE PIPELINE ---
+    return jsonify({
+        "status": "success"
+    })
 
-@app.route('/generate', methods=['POST'])
+
+# =========================================================
+# GENERATE AI RESPONSE
+# =========================================================
+
+@app.route("/generate", methods=["POST"])
 def generate():
-    data = request.json
-    # Change this line inside app.py:
-    user_message = data.get('message', '').strip()
-    model = data.get('model')
-    thread_id = data.get('thread_id')
-    
-    if not user_message or not model:
-        return jsonify({"error": "Missing message or model selection"}), 400
-    
-    conn = sqlite3.connect('chat_history.db')
+
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({
+            "error": "Invalid JSON request."
+        }), 400
+
+    user_message = data.get("message", "").strip()
+    thread_id = data.get("thread_id")
+
+    if not user_message:
+        return jsonify({
+            "error": "Message cannot be empty."
+        }), 400
+
+    conn = get_db()
+
     cursor = conn.cursor()
 
-    # Create a brand new thread tracker if one wasn't passed from UI
-    if not thread_id:
-        thread_id = str(uuid.uuid4())
-        # Truncate title length to keep sidebar clean
-        title = user_message[:24] + "..." if len(user_message) > 24 else user_message
-        cursor.execute("INSERT INTO threads (id, title) VALUES (?, ?)", (thread_id, title))
-    
-    # Fetch historical data context logs from this specific thread
-    cursor.execute("SELECT role, content FROM messages WHERE thread_id = ? ORDER BY id ASC", (thread_id,))
-    past_turns = cursor.fetchall()
-    
-    # STRICT SHORTENING INSTRUCTIONS ADDED HERE
-    #system_prompt = (
-     #   "You are Sarvam Maya, a helpful AI assistant. "
-       # "CRITICAL: Keep your answers ultra-short, concise, and direct. "
-     #   "Never use conversational filler or long explanations unless explicitly requested. "
-      #  "Get straight to the point in 1-3 sentences maximum using bold markdown tags if appropriate."
-    #)
-    # Inside app.py under def generate():
-    system_prompt = (
-        "You are Sarvam Maya, a highly intelligent and adaptive AI assistant. "
-        "Your task is to dynamically adjust the length of your response based on the user's intent:\n\n"
-        
-        "1. SHORT ANSWERS (1-2 sentences): Use this for simple factual lookups, greetings, "
-        "or binary questions (e.g., yes/no, definitions, capitals, greetings).\n"
-        
-        "2. MEDIUM ANSWERS (1-3 brief paragraphs): Use this for conceptual explanations, 'how-to' questions, "
-        "or summaries. Keep it structured using bold text (**).\n"
-        
-        "3. LONG ANSWERS (Comprehensive layout): Use this ONLY when the user explicitly asks for detailed guides, "
-        "code generation, roadmaps, comparison essays, or complex troubleshooting. "
-        "Structure these heavily with Markdown headers (##), bold text, and bullet points.\n\n"
-        
-        "Analyze the user's prompt carefully and choose the most effective layout style instantly. "
-        "Avoid unnecessary conversational filler in all modes."
-    )
-    
-    # Build historical prompt compilation context
-    history_context = ""
-    if past_turns:
-        history_context = "\n\n--- Prior Chat Log Context ---\n"
-        for role, content in past_turns[-6:]:
-            history_context += f"{role.upper()}: {content}\n"
-        history_context += "---------------------------------\n"
-        
-    full_prompt = f"{history_context}USER: {user_message}"
-    start_time = time.time()
-    
     try:
-        if model == 'llama':
-            result = llama_response(system_prompt, full_prompt)
-        elif model == 'granite':
-            result = granite_response(system_prompt, full_prompt)
-        elif model == 'mistral':
-            result = mistral_response(system_prompt, full_prompt)
+
+        # =================================================
+        # CREATE OR VALIDATE THREAD
+        # =================================================
+
+        if not thread_id:
+
+            thread_id = str(uuid.uuid4())
+
+            title = (
+                user_message[:40] + "..."
+                if len(user_message) > 40
+                else user_message
+            )
+
+            cursor.execute("""
+                INSERT INTO threads (
+                    id,
+                    title
+                )
+                VALUES (?, ?)
+            """, (
+                thread_id,
+                title
+            ))
+
         else:
-            return jsonify({"error": "Invalid model selection"}), 400
-        
-        ai_response_text = result['response_text'].strip()
-        
-        # Log conversational updates straight to DB
-        cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (?, 'user', ?)", (thread_id, user_message))
-        cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (?, 'assistant', ?)", (thread_id, ai_response_text))
+
+            existing_thread = cursor.execute("""
+                SELECT id
+                FROM threads
+                WHERE id = ?
+            """, (thread_id,)).fetchone()
+
+            if not existing_thread:
+
+                conn.close()
+
+                return jsonify({
+                    "error": "Conversation thread not found."
+                }), 404
+
+
+        # =================================================
+        # GET PREVIOUS CONVERSATION
+        # =================================================
+
+        past_turns = cursor.execute("""
+            SELECT role, content
+            FROM messages
+            WHERE thread_id = ?
+            ORDER BY id ASC
+        """, (thread_id,)).fetchall()
+
+
+        conversation = []
+
+        # Keep latest 12 messages
+        for message in past_turns[-12:]:
+
+            conversation.append({
+                "role": message["role"],
+                "content": message["content"]
+            })
+
+
+        # Add current user message
+        conversation.append({
+            "role": "user",
+            "content": user_message
+        })
+
+
+        # =================================================
+        # SAVE USER MESSAGE
+        # =================================================
+
+        cursor.execute("""
+            INSERT INTO messages (
+                thread_id,
+                role,
+                content
+            )
+            VALUES (?, ?, ?)
+        """, (
+            thread_id,
+            "user",
+            user_message
+        ))
+
+
+        # =================================================
+        # CALL LLAMA
+        # =================================================
+
+        start_time = time.time()
+
+        result = groq_response(
+            SYSTEM_PROMPT,
+            conversation
+        )
+
+        ai_response_text = result["response_text"].strip()
+
+        duration = round(
+            time.time() - start_time,
+            3
+        )
+
+
+        if not ai_response_text:
+
+            raise RuntimeError(
+                "The model returned an empty response."
+            )
+
+
+        # =================================================
+        # SAVE ASSISTANT MESSAGE
+        # =================================================
+
+        cursor.execute("""
+            INSERT INTO messages (
+                thread_id,
+                role,
+                content
+            )
+            VALUES (?, ?, ?)
+        """, (
+            thread_id,
+            "assistant",
+            ai_response_text
+        ))
+
+
+        # =================================================
+        # UPDATE THREAD TIMESTAMP
+        # =================================================
+
+        cursor.execute("""
+            UPDATE threads
+            SET timestamp = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (thread_id,))
+
+
         conn.commit()
-        conn.close()
-        
+
+
         return jsonify({
             "response_text": ai_response_text,
             "thread_id": thread_id,
-            "duration": time.time() - start_time
+            "duration": duration
         })
-        
-    except Exception as e:
-        conn.close()
-        return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True)
+
+    except Exception as e:
+
+        conn.rollback()
+
+        print("ERROR:", repr(e))
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+    finally:
+
+        conn.close()
+
+
+# =========================================================
+# RUN APPLICATION
+# =========================================================
+
+if __name__ == "__main__":
+
+    app.run(
+        debug=True,
+        host="0.0.0.0",
+        port=5000
+    )
